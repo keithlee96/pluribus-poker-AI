@@ -6,7 +6,7 @@ This is a fork of the [original Pluribus Poker AI implementation](https://github
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/pluribus-poker-AI.git
+git clone https://github.com/HubertPiotrowski/pluribus-poker-AI.git
 cd pluribus-poker-AI
 
 # Create and activate virtual environment
