@@ -31,8 +31,8 @@ class GameUtility:
             Evaluation of hand
         """
         return self._evaluator.evaluate(
-            board=self.board.astype(np.int).tolist(),
-            cards=hand.astype(np.int).tolist(),
+            board=self.board.astype(np.int64).tolist(),
+            cards=hand.astype(np.int64).tolist(),
         )
 
     def get_winner(self) -> int:
