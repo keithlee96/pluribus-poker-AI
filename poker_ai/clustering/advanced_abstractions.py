@@ -1,193 +1,251 @@
-"""Advanced abstraction techniques based on Pluribus paper."""
+"""Advanced abstraction techniques for more sophisticated clustering."""
 import numpy as np
-from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.stats import wasserstein_distance
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Any
+import logging
 
-class AdvancedAbstractions:
-    def __init__(self, n_clusters: int = 1000):
-        self.n_clusters = n_clusters
+log = logging.getLogger(__name__)
+
+class PotentialAwareAbstraction:
+    """
+    Implements potential-aware abstraction techniques similar to those used in Pluribus.
+    This helps create more sophisticated abstractions that consider future possibilities.
+    """
     
-    def hierarchical_cluster(self, X: np.ndarray) -> np.ndarray:
-        """Use hierarchical clustering instead of KMeans.
+    def __init__(self, n_clusters: int = 100, n_samples: int = 1000):
+        self.n_clusters = n_clusters
+        self.n_samples = n_samples
         
-        This allows for better handling of non-spherical clusters and
-        captures the natural hierarchy in poker hand strengths.
-        """
-        # Perform hierarchical clustering
-        Z = linkage(X, method='ward')
-        # Get cluster assignments
-        clusters = fcluster(Z, t=self.n_clusters, criterion='maxclust')
-        return clusters
-
-    def multi_street_potential(
+    def compute_potential_distribution(
         self,
-        our_hand: np.ndarray,
-        board: np.ndarray,
-        available_cards: np.ndarray,
-        n_samples: int = 1000,
+        current_state: np.ndarray,
+        future_states: List[np.ndarray],
+        future_clusters: Dict[str, Any]
     ) -> np.ndarray:
-        """Calculate potential-aware abstraction looking multiple streets ahead.
+        """
+        Compute potential-aware distribution considering future possibilities.
         
-        Instead of just looking at the next street, we:
-        1. Sample possible turn and river cards
-        2. Weight situations by their probability
-        3. Consider opponent reactions
+        Parameters
+        ----------
+        current_state : np.ndarray
+            Current game state representation
+        future_states : List[np.ndarray]
+            Possible future states
+        future_clusters : Dict[str, Any]
+            Clustering information for future states
+            
+        Returns
+        -------
+        np.ndarray
+            Potential-aware distribution
         """
         distribution = np.zeros(self.n_clusters)
         
-        # Sample possible futures
-        for _ in range(n_samples):
-            # Sample turn card
-            turn_cards = np.random.choice(available_cards, 1, replace=False)
-            turn_board = np.append(board, turn_cards)
-            
-            # Get remaining cards
-            remaining_cards = np.array([c for c in available_cards if c not in turn_cards])
-            
-            # Sample river cards
-            river_cards = np.random.choice(remaining_cards, 1, replace=False)
-            river_board = np.append(turn_board, river_cards)
-            
-            # Calculate strength at each stage
-            turn_strength = self._calculate_strength(our_hand, turn_board)
-            river_strength = self._calculate_strength(our_hand, river_board)
-            
-            # Weight by probability and potential
-            weight = self._calculate_weight(turn_strength, river_strength)
-            
-            # Update distribution
-            cluster_idx = self._get_cluster_index(river_strength)
-            distribution[cluster_idx] += weight / n_samples
+        for future_state in future_states:
+            # Calculate similarity to each cluster
+            similarities = self._compute_state_similarities(future_state, future_clusters)
+            # Update distribution based on similarities
+            distribution += similarities / len(future_states)
             
         return distribution
     
-    def _calculate_strength(self, hand: np.ndarray, board: np.ndarray) -> float:
-        """Calculate hand strength against range of opponent hands."""
-        # TODO: Implement more sophisticated strength calculation
-        # Should consider:
-        # - Equity against opponent range
-        # - Board texture
-        # - Drawing potential
-        return 0.5  # Placeholder
-    
-    def _calculate_weight(self, turn_strength: float, river_strength: float) -> float:
-        """Calculate weight for a particular future scenario.
-        
-        Weights situations based on:
-        1. How likely they are to occur
-        2. How much potential they have
-        3. Strategic importance
+    def _compute_state_similarities(
+        self,
+        state: np.ndarray,
+        clusters: Dict[str, Any]
+    ) -> np.ndarray:
         """
-        # Give higher weight to:
-        # - Large strength changes (high potential)
-        # - Common board textures
-        potential = abs(river_strength - turn_strength)
-        return 1.0 + potential  # Simple weighting scheme
-    
-    def _get_cluster_index(self, strength: float) -> int:
-        """Map a strength value to a cluster index."""
-        # Simple linear mapping - could be more sophisticated
-        return min(int(strength * self.n_clusters), self.n_clusters - 1)
+        Compute similarities between a state and all clusters.
+        
+        Parameters
+        ----------
+        state : np.ndarray
+            Game state to compare
+        clusters : Dict[str, Any]
+            Cluster information
+            
+        Returns
+        -------
+        np.ndarray
+            Similarity scores
+        """
+        similarities = np.zeros(self.n_clusters)
+        
+        for i, centroid in enumerate(clusters['centroids']):
+            similarity = 1.0 / (1.0 + wasserstein_distance(state, centroid))
+            similarities[i] = similarity
+            
+        return similarities / np.sum(similarities)  # Normalize
 
-class RealTimeSolver:
-    """Implements real-time solving during gameplay."""
+class ImplicitModelingAbstraction:
+    """
+    Implements implicit modeling abstractions that consider opponent modeling
+    in the abstraction process, similar to Pluribus's approach.
+    """
     
-    def __init__(self, max_depth: int = 2):
-        self.max_depth = max_depth
-    
-    def get_action_distribution(
+    def __init__(self, n_opponent_models: int = 3):
+        self.n_opponent_models = n_opponent_models
+        
+    def compute_opponent_aware_features(
         self,
-        game_state: Dict,
-        opponent_strategies: List[Dict],
-    ) -> Dict[str, float]:
-        """Get action probabilities using depth-limited solving.
-        
-        Args:
-            game_state: Current game state
-            opponent_strategies: List of possible opponent strategies to consider
-        
-        Returns:
-            Dictionary mapping actions to probabilities
+        state: np.ndarray,
+        action_history: List[Tuple[int, int]]
+    ) -> np.ndarray:
         """
-        action_values = {}
+        Compute features that incorporate opponent modeling.
         
-        # For each possible action
-        for action in self._get_legal_actions(game_state):
-            values = []
+        Parameters
+        ----------
+        state : np.ndarray
+            Current game state
+        action_history : List[Tuple[int, int]]
+            History of actions as (player, action) pairs
             
-            # Consider multiple opponent strategies
-            for opp_strategy in opponent_strategies:
-                # Look ahead max_depth steps
-                value = self._look_ahead(
-                    game_state,
-                    action,
-                    opp_strategy,
-                    depth=0
-                )
-                values.append(value)
-            
-            # Use robust value (minimum across opponent strategies)
-            action_values[action] = min(values)
+        Returns
+        -------
+        np.ndarray
+            Enhanced feature vector incorporating opponent modeling
+        """
+        base_features = self._compute_base_features(state)
+        opponent_features = self._compute_opponent_features(action_history)
         
-        return self._normalize_to_distribution(action_values)
+        return np.concatenate([base_features, opponent_features])
     
-    def _look_ahead(
+    def _compute_base_features(self, state: np.ndarray) -> np.ndarray:
+        """Compute basic state features."""
+        # Basic features like hand strength, pot odds, etc.
+        return state
+    
+    def _compute_opponent_features(
         self,
-        state: Dict,
-        action: str,
-        opp_strategy: Dict,
-        depth: int
+        action_history: List[Tuple[int, int]]
+    ) -> np.ndarray:
+        """
+        Compute opponent modeling features from action history.
+        
+        This implements a simple but effective opponent modeling approach:
+        - Tracks betting patterns
+        - Estimates aggression factors
+        - Models position-based tendencies
+        """
+        features = np.zeros(self.n_opponent_models * 3)  # 3 features per opponent
+        
+        if not action_history:
+            return features
+            
+        # Compute per-opponent features
+        for i in range(self.n_opponent_models):
+            player_actions = [a for p, a in action_history if p == i]
+            if player_actions:
+                # Aggression factor (ratio of bets/raises to calls)
+                aggressive_actions = sum(1 for a in player_actions if a > 1)
+                passive_actions = sum(1 for a in player_actions if a == 1)
+                aggression = aggressive_actions / (passive_actions + 1e-8)
+                
+                # Positional play factor
+                position_actions = [a for p, a in action_history[-3:] if p == i]
+                position_aggression = np.mean([a > 1 for a in position_actions]) if position_actions else 0
+                
+                # Consistency factor (variance in action types)
+                action_variance = np.var(player_actions) if len(player_actions) > 1 else 0
+                
+                features[i*3:(i+1)*3] = [aggression, position_aggression, action_variance]
+                
+        return features
+
+class StrengthBucketing:
+    """
+    Implements sophisticated hand strength bucketing similar to Pluribus.
+    This helps create more efficient abstractions while maintaining strategic depth.
+    """
+    
+    def __init__(self, n_buckets: int = 50):
+        self.n_buckets = n_buckets
+        
+    def compute_strength_bucket(
+        self,
+        hand_strength: float,
+        board_texture: np.ndarray,
+        pot_size: float
+    ) -> int:
+        """
+        Compute sophisticated strength bucket considering multiple factors.
+        
+        Parameters
+        ----------
+        hand_strength : float
+            Raw hand strength value
+        board_texture : np.ndarray
+            Board texture features
+        pot_size : float
+            Current pot size
+            
+        Returns
+        -------
+        int
+            Bucket index
+        """
+        # Combine multiple factors for bucketing
+        bucket_value = self._compute_bucket_value(hand_strength, board_texture, pot_size)
+        
+        # Non-linear bucketing with more resolution in important ranges
+        if bucket_value < 0.3:
+            # More buckets for weak hands
+            bucket_index = int(bucket_value * self.n_buckets * 1.5)
+        elif bucket_value > 0.7:
+            # More buckets for strong hands
+            bucket_index = int((0.7 * self.n_buckets * 1.2) + 
+                             ((bucket_value - 0.7) * self.n_buckets * 1.5))
+        else:
+            # Regular bucketing for medium strength
+            bucket_index = int(bucket_value * self.n_buckets)
+            
+        return min(bucket_index, self.n_buckets - 1)
+    
+    def _compute_bucket_value(
+        self,
+        hand_strength: float,
+        board_texture: np.ndarray,
+        pot_size: float
     ) -> float:
-        """Recursive lookahead for depth-limited solving."""
-        if depth >= self.max_depth:
-            return self._evaluate_state(state)
-            
-        # Apply action
-        new_state = self._apply_action(state, action)
+        """
+        Compute sophisticated bucket value considering multiple factors.
         
-        if self._is_terminal(new_state):
-            return self._evaluate_state(new_state)
-            
-        # Opponent's turn - use their strategy
-        if depth % 2 == 1:
-            value = 0
-            for opp_action, prob in opp_strategy.items():
-                child_value = self._look_ahead(
-                    new_state,
-                    opp_action,
-                    opp_strategy,
-                    depth + 1
-                )
-                value += prob * child_value
-            return value
-            
-        # Our turn - choose best action
-        values = []
-        for next_action in self._get_legal_actions(new_state):
-            value = self._look_ahead(
-                new_state,
-                next_action,
-                opp_strategy,
-                depth + 1
-            )
-            values.append(value)
-        return max(values)
+        This implements ideas from Pluribus's bucketing approach:
+        - Considers board texture for more accurate strength assessment
+        - Accounts for pot size in bucketing decisions
+        - Uses non-linear scaling for more strategic abstraction
+        """
+        # Base value from hand strength
+        bucket_value = hand_strength
+        
+        # Adjust based on board texture
+        texture_factor = self._compute_texture_factor(board_texture)
+        bucket_value *= (1.0 + 0.2 * (texture_factor - 0.5))
+        
+        # Consider pot size for bucketing
+        pot_factor = min(1.0, pot_size / 100.0)  # Normalize pot size
+        bucket_value *= (1.0 + 0.1 * (pot_factor - 0.5))
+        
+        return np.clip(bucket_value, 0.0, 1.0)
     
-    def _normalize_to_distribution(self, values: Dict[str, float]) -> Dict[str, float]:
-        """Convert values to a probability distribution."""
-        total = sum(values.values())
-        return {k: v/total for k, v in values.items()}
-    
-    # Placeholder methods - would need proper implementation
-    def _get_legal_actions(self, state: Dict) -> List[str]:
-        return ["fold", "call", "raise"]
+    def _compute_texture_factor(self, board_texture: np.ndarray) -> float:
+        """
+        Compute board texture factor for strength adjustment.
         
-    def _apply_action(self, state: Dict, action: str) -> Dict:
-        return state  # Placeholder
+        Considers:
+        - Flush possibilities
+        - Straight possibilities
+        - Card pairing
+        """
+        # Implement sophisticated board texture analysis
+        # This is a simplified version - real Pluribus uses more complex analysis
+        texture_features = [
+            np.mean(board_texture),  # Average card rank
+            np.std(board_texture),   # Spread of ranks
+            len(set(board_texture)), # Unique ranks (pairs detection)
+        ]
         
-    def _is_terminal(self, state: Dict) -> bool:
-        return False  # Placeholder
-        
-    def _evaluate_state(self, state: Dict) -> float:
-        return 0.0  # Placeholder
+        # Combine features with learned weights
+        weights = [0.4, 0.3, 0.3]  # Could be learned from data
+        return np.clip(np.dot(texture_features, weights), 0.0, 1.0)
