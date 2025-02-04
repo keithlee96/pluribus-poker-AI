@@ -13,7 +13,6 @@ from poker_ai.games.short_deck import state
 from poker_ai.ai.multiprocess.worker import Worker
 
 log = logging.getLogger("sync.server")
-manager = mp.Manager()
 
 
 class Server:
@@ -64,10 +63,14 @@ class Server:
             lut_path, pickle_dir
         )
         log.info("Loaded lookup table.")
+        
+        # Create manager instance
+        self._manager = mp.Manager()
+        
         self._job_queue: mp.JoinableQueue = mp.JoinableQueue(maxsize=n_processes)
         self._status_queue: mp.Queue = mp.Queue()
         self._logging_queue: mp.Queue = mp.Queue()
-        self._worker_status: Dict[str, str] = dict()
+        self._worker_status: Dict[str, str] = self._manager.dict()
         self._agent: Agent = Agent(agent_path)
         self._locks: Dict[str, mp.synchronize.Lock] = dict(
             regret=mp.Lock(), strategy=mp.Lock(), pre_flop_strategy=mp.Lock()

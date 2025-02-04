@@ -1,8 +1,17 @@
 import glob
+import re
 import setuptools
 from typing import List
 
-import poker_ai
+
+def get_version() -> str:
+    """Get version from __init__.py without importing the package."""
+    with open("poker_ai/__init__.py", "r") as f:
+        content = f.read()
+        version_match = re.search(r'^__version__ = ["\']([^"\']*)["\']', content, re.M)
+        if version_match:
+            return version_match.group(1)
+        raise RuntimeError("Unable to find version string.")
 
 
 def get_scripts_from_bin() -> List[str]:
@@ -28,7 +37,7 @@ def get_requirements() -> List[str]:
 
 setuptools.setup(
     name="poker_ai",
-    version=poker_ai.__version__,
+    version=get_version(),
     author="Leon Fedden, Colin Manko",
     author_email="leonfedden@gmail.com",
     description="Open source implementation of a CFR based poker AI player.",
